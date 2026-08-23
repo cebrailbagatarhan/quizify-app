@@ -1,50 +1,97 @@
-import { GoogleGenAI } from '@google/genai';
+const rawProxyUrl = process.env.EXPO_PUBLIC_AI_PROXY_URL?.trim();
 
-// API key'i direkt al
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyByAxI64OoS1NRnOTcz5GE7Jv0oJbXLpg4';
-
-// Initialize Google GenAI
-const genAI = new GoogleGenAI({
-  apiKey: GEMINI_API_KEY,
-});
-
-// Rate limiting configuration
 const RATE_LIMIT = {
   requestsPerMinute: 30,
   requestsPerHour: 300,
   retryAttempts: 3,
-  retryDelay: 2000, // Start with 2 seconds
-  maxRetryDelay: 10000, // Max 10 seconds
+  retryDelay: 2000,
+  maxRetryDelay: 10000,
 };
 
-let requestCount = 0;
 let lastRequestTime = 0;
 let hourlyRequestCount = 0;
 let hourlyStartTime = Date.now();
+
+const getProxyUrl = () => {
+  if (!rawProxyUrl) return null;
+
+  const normalized = rawProxyUrl.replace(/\/+$/, '');
+  const parsed = new URL(normalized);
+  const isLocal = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+
+  if (parsed.protocol !== 'https:' && !isLocal) {
+    throw new Error('AI proxy must use HTTPS outside local development.');
+  }
+
+  return normalized;
+};
+
+const isQuestion = question => (
+  question &&
+  typeof question === 'object' &&
+  typeof question.question === 'string' &&
+  Array.isArray(question.options) &&
+  question.options.length >= 2 &&
+  question.options.every(option => typeof option === 'string') &&
+  Number.isInteger(question.correctAnswer) &&
+  question.correctAnswer >= 0 &&
+  question.correctAnswer < question.options.length
+);
+
+const requestQuizFromProxy = async topic => {
+  const proxyUrl = getProxyUrl();
+  if (!proxyUrl) throw new Error('AI proxy is not configured.');
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+
+  try {
+    const response = await fetch(`${proxyUrl}/v1/quiz`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ topic }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const error = new Error(`AI proxy request failed with status ${response.status}.`);
+      error.status = response.status;
+      throw error;
+    }
+
+    const payload = await response.json();
+    const questions = Array.isArray(payload) ? payload : payload?.questions;
+    if (!Array.isArray(questions) || questions.length === 0 || !questions.every(isQuestion)) {
+      throw new Error('AI proxy returned an invalid quiz response.');
+    }
+
+    return questions;
+  } finally {
+    clearTimeout(timeout);
+  }
+};
 
 class RateLimiter {
   static checkRateLimit() {
     const now = Date.now();
     const timeSinceLastRequest = now - lastRequestTime;
 
-    // Reset hourly counter if an hour has passed
     if (now - hourlyStartTime > 60 * 60 * 1000) {
       hourlyRequestCount = 0;
       hourlyStartTime = now;
     }
 
-    // Check per-minute rate limit
     if (timeSinceLastRequest < 60000 / RATE_LIMIT.requestsPerMinute) {
       throw new Error('Rate limit exceeded. Please wait before making another request.');
     }
 
-    // Check per-hour rate limit
     if (hourlyRequestCount >= RATE_LIMIT.requestsPerHour) {
       throw new Error('Hourly rate limit exceeded. Please try again later.');
     }
 
     lastRequestTime = now;
-    requestCount++;
     hourlyRequestCount++;
   }
 
@@ -53,30 +100,17 @@ class RateLimiter {
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        const result = await operation();
-
-        if (result) {
-          return result;
-        }
+        return await operation();
       } catch (error) {
         lastError = error;
-        console.warn(`Attempt ${attempt}/${maxAttempts} failed:`, error.message);
+        const status = error?.status;
+        if (status !== 503 || attempt === maxAttempts) throw error;
 
-        // Only retry on API overload (503) errors, not rate limit errors
-        if (error.message.includes('Rate limit exceeded') ||
-            error.message.includes('API anahtarı')) {
-          throw error;
-        }
-
-        // Only retry on 503 (overloaded) errors
-        if (attempt < maxAttempts && error.message.includes('503')) {
-          const delay = Math.min(
-            RATE_LIMIT.retryDelay * Math.pow(2, attempt - 1),
-            RATE_LIMIT.maxRetryDelay
-          );
-          console.log(`Model overloaded, retrying in ${delay}ms... (Attempt ${attempt}/${maxAttempts})`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
+        const delay = Math.min(
+          RATE_LIMIT.retryDelay * Math.pow(2, attempt - 1),
+          RATE_LIMIT.maxRetryDelay
+        );
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
 
@@ -86,145 +120,32 @@ class RateLimiter {
 
 export const generativeAIService = {
   async generateQuiz(topic) {
-    // Check if API key is available
-    if (!GEMINI_API_KEY || GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY') {
-      throw new Error('Gemini API anahtarı bulunamadı. Lütfen .env dosyanızı kontrol edin.');
+    if (!rawProxyUrl) {
+      console.warn('AI proxy is not configured; using local mock quiz data.');
+      return this.getMockQuizData(topic);
     }
 
-    const prompt = `
-      Lütfen aşağıdaki konsepti kullanarak bir quiz oluşturun:
-
-      **Konu:** ${topic}
-
-      **İstekler:**
-      1.  **Soru Sayısı:** 5 adet çoktan seçmeli soru oluşturun.
-      2.  **Zorluk:** Orta seviyede.
-      3.  **Format:** Her soru için 4 seçenek ve doğru cevabı belirten bir index numarası (0'dan başlayarak).
-      4.  **Bilgi Kaynağı:** Soruları oluştururken Britannica gibi güvenilir kaynaklardan yararlanın. Cevapların doğruluğunu garanti altına almak için teyit edilmiş bilgiler kullanın.
-      5.  **Dil:** Türkçe.
-
-      **Örnek Çıktı Formatı (JSON):**
-      \`\`\`json
-      {
-        "questions": [
-          {
-            "id": 1,
-            "question": "Roma İmparatorluğu'nun ilk imparatoru kimdir?",
-            "options": [
-              "Jül Sezar",
-              "Augustus",
-              "Nero",
-              "Tiberius"
-            ],
-            "correctAnswer": 1,
-            "timeLimit": 15
-          }
-        ]
-      }
-      \`\`\`
-
-      Önemli: Sadece JSON formatında yanıt verin, başka hiçbir açıklama eklemeyin.
-    `;
-
     try {
-      // Check rate limit before making the API call
       RateLimiter.checkRateLimit();
-
-      console.log('Google GenAI ile quiz oluşturuluyor...');
-
-      const response = await genAI.models.generateContent({
-        model: 'gemini-2.0-flash',
-        contents: prompt,
-      });
-
-      console.log('GenAI yanıtı alındı');
-
-      if (!response || !response.text) {
-        throw new Error('Empty response from GenAI');
-      }
-
-      const textResponse = response.text;
-      console.log('Text Response length:', textResponse.length);
-
-      // Try to extract JSON from the response
-      const jsonMatch = textResponse.match(/```json([\s\S]*?)```/);
-
-      if (!jsonMatch || !jsonMatch[1]) {
-        console.error("Raw GenAI response:", textResponse.substring(0, 500));
-        // Fallback: try to parse the entire response as JSON
-        try {
-          const quizData = JSON.parse(textResponse.trim());
-          return quizData.questions;
-        } catch {
-          throw new Error("GenAI'den gelen yanıtta geçerli bir JSON formatı bulunamadı.");
-        }
-      }
-
-      const jsonString = jsonMatch[1].trim();
-      const quizData = JSON.parse(jsonString);
-
-      if (!quizData.questions || quizData.questions.length === 0) {
-        throw new Error('Quiz soruları oluşturulamadı.');
-      }
-
-      return quizData.questions;
-
+      return await RateLimiter.retryWithBackoff(() => requestQuizFromProxy(topic));
     } catch (error) {
-      console.error('Quiz oluşturulurken hata oluştu:', error.message);
-
-      // Return mock data if API fails (for development)
-      if (error.message.includes('API anahtarı')) {
-        throw error; // Re-throw API key errors
-      }
-
-      // For other errors, return mock data
-      console.warn('GenAI başarısız, mock data kullanılıyor');
+      console.error('Quiz oluşturulurken hata oluştu:', error?.message);
+      console.warn('AI proxy başarısız, mock data kullanılıyor');
       return this.getMockQuizData(topic);
     }
   },
 
-  // Mock data for development/testing when API fails
   getMockQuizData(topic) {
     const mockQuestions = {
       'Roma İmparatorluğu': [
-        {
-          id: 1,
-          question: `${topic} hakkında örnek soru 1`,
-          options: ['Cevap A', 'Cevap B', 'Cevap C', 'Cevap D'],
-          correctAnswer: 0,
-          timeLimit: 15
-        },
-        {
-          id: 2,
-          question: `${topic} hakkında örnek soru 2`,
-          options: ['Cevap A', 'Cevap B', 'Cevap C', 'Cevap D'],
-          correctAnswer: 1,
-          timeLimit: 15
-        },
-        {
-          id: 3,
-          question: `${topic} hakkında örnek soru 3`,
-          options: ['Cevap A', 'Cevap B', 'Cevap C', 'Cevap D'],
-          correctAnswer: 2,
-          timeLimit: 15
-        },
-        {
-          id: 4,
-          question: `${topic} hakkında örnek soru 4`,
-          options: ['Cevap A', 'Cevap B', 'Cevap C', 'Cevap D'],
-          correctAnswer: 3,
-          timeLimit: 15
-        },
-        {
-          id: 5,
-          question: `${topic} hakkında örnek soru 5`,
-          options: ['Cevap A', 'Cevap B', 'Cevap C', 'Cevap D'],
-          correctAnswer: 0,
-          timeLimit: 15
-        }
-      ]
+        { id: 1, question: `${topic} hakkında örnek soru 1`, options: ['Cevap A', 'Cevap B', 'Cevap C', 'Cevap D'], correctAnswer: 0, timeLimit: 15 },
+        { id: 2, question: `${topic} hakkında örnek soru 2`, options: ['Cevap A', 'Cevap B', 'Cevap C', 'Cevap D'], correctAnswer: 1, timeLimit: 15 },
+        { id: 3, question: `${topic} hakkında örnek soru 3`, options: ['Cevap A', 'Cevap B', 'Cevap C', 'Cevap D'], correctAnswer: 2, timeLimit: 15 },
+        { id: 4, question: `${topic} hakkında örnek soru 4`, options: ['Cevap A', 'Cevap B', 'Cevap C', 'Cevap D'], correctAnswer: 3, timeLimit: 15 },
+        { id: 5, question: `${topic} hakkında örnek soru 5`, options: ['Cevap A', 'Cevap B', 'Cevap C', 'Cevap D'], correctAnswer: 0, timeLimit: 15 },
+      ],
     };
 
     return mockQuestions[topic] || mockQuestions['Roma İmparatorluğu'];
-  }
+  },
 };
