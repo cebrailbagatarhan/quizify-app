@@ -54,7 +54,7 @@ export default function HomeScreen({ navigation }) {
       console.error(error);
       Alert.alert(
         'Bir Hata Oluştu',
-        'Sorular oluşturulurken bir sorun yaşandı. Lütfen API anahtarınızı ve internet bağlantınızı kontrol edin.'
+        'Sorular oluşturulurken bir sorun yaşandı. Lütfen AI servisini ve internet bağlantınızı kontrol edin.'
       );
     } finally {
       setLoading(false);
