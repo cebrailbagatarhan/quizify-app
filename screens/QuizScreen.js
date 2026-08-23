@@ -166,6 +166,7 @@ export default function QuizScreen({ route, navigation }) {
     const totalTime = Math.floor((Date.now() - startTime) / 1000);
     navigation.replace('Results', {
       category,
+      questions,
       answers: [...answers],
       totalTime,
       totalQuestions: questions.length,
