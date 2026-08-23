@@ -1,3 +1,5 @@
+import { normalizeQuizResponse } from '../utils/quizContract.mjs';
+
 const rawProxyUrl = process.env.EXPO_PUBLIC_AI_PROXY_URL?.trim();
 
 const RATE_LIMIT = {
@@ -26,18 +28,6 @@ const getProxyUrl = () => {
   return normalized;
 };
 
-const isQuestion = question => (
-  question &&
-  typeof question === 'object' &&
-  typeof question.question === 'string' &&
-  Array.isArray(question.options) &&
-  question.options.length >= 2 &&
-  question.options.every(option => typeof option === 'string') &&
-  Number.isInteger(question.correctAnswer) &&
-  question.correctAnswer >= 0 &&
-  question.correctAnswer < question.options.length
-);
-
 const requestQuizFromProxy = async topic => {
   const proxyUrl = getProxyUrl();
   if (!proxyUrl) throw new Error('AI proxy is not configured.');
@@ -62,8 +52,8 @@ const requestQuizFromProxy = async topic => {
     }
 
     const payload = await response.json();
-    const questions = Array.isArray(payload) ? payload : payload?.questions;
-    if (!Array.isArray(questions) || questions.length === 0 || !questions.every(isQuestion)) {
+    const questions = normalizeQuizResponse(payload);
+    if (!questions) {
       throw new Error('AI proxy returned an invalid quiz response.');
     }
 
