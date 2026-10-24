@@ -17,6 +17,8 @@ const { width, height } = Dimensions.get('window');
 export default function QuizScreen({ route, navigation }) {
   const { category, questions } = route.params;
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  // Resolve the current question before using its time limit for initial state.
+  const currentQuestion = questions[currentQuestionIndex];
   const [answers, setAnswers] = useState([]);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [timeLeft, setTimeLeft] = useState(currentQuestion?.timeLimit || 10);
@@ -28,7 +30,6 @@ export default function QuizScreen({ route, navigation }) {
   const timerAnimation = useRef(new Animated.Value(1)).current;
   const timerRef = useRef(null); // Timer referansı için
 
-  const currentQuestion = questions[currentQuestionIndex];
   useEffect(() => {
     startTimer();
     animateProgress();
