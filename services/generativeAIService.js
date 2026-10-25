@@ -1,185 +1,61 @@
-import { GoogleGenAI } from '@google/genai';
+// The mobile app must never contain a Gemini/API provider key.
+// Configure a trusted server endpoint using EXPO_PUBLIC_QUIZ_API_URL.
+// The server authenticates callers, rate-limits requests and keeps its Gemini key private.
+const QUIZ_API_URL = process.env.EXPO_PUBLIC_QUIZ_API_URL?.trim();
 
-// API key'i direkt al
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyByAxI64OoS1NRnOTcz5GE7Jv0oJbXLpg4';
-
-// Initialize Google GenAI
-const genAI = new GoogleGenAI({
-  apiKey: GEMINI_API_KEY,
-});
-
-// Rate limiting configuration
-const RATE_LIMIT = {
-  requestsPerMinute: 30,
-  requestsPerHour: 300,
-  retryAttempts: 3,
-  retryDelay: 2000, // Start with 2 seconds
-  maxRetryDelay: 10000, // Max 10 seconds
-};
-
-let requestCount = 0;
-let lastRequestTime = 0;
-let hourlyRequestCount = 0;
-let hourlyStartTime = Date.now();
-
-class RateLimiter {
-  static checkRateLimit() {
-    const now = Date.now();
-    const timeSinceLastRequest = now - lastRequestTime;
-
-    // Reset hourly counter if an hour has passed
-    if (now - hourlyStartTime > 60 * 60 * 1000) {
-      hourlyRequestCount = 0;
-      hourlyStartTime = now;
-    }
-
-    // Check per-minute rate limit
-    if (timeSinceLastRequest < 60000 / RATE_LIMIT.requestsPerMinute) {
-      throw new Error('Rate limit exceeded. Please wait before making another request.');
-    }
-
-    // Check per-hour rate limit
-    if (hourlyRequestCount >= RATE_LIMIT.requestsPerHour) {
-      throw new Error('Hourly rate limit exceeded. Please try again later.');
-    }
-
-    lastRequestTime = now;
-    requestCount++;
-    hourlyRequestCount++;
+function validateQuestions(payload) {
+  if (!payload || !Array.isArray(payload.questions) || payload.questions.length < 1 || payload.questions.length > 20) {
+    throw new Error('Sunucu geçerli quiz soruları döndürmedi.');
   }
 
-  static async retryWithBackoff(operation, maxAttempts = RATE_LIMIT.retryAttempts) {
-    let lastError;
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        const result = await operation();
-
-        if (result) {
-          return result;
-        }
-      } catch (error) {
-        lastError = error;
-        console.warn(`Attempt ${attempt}/${maxAttempts} failed:`, error.message);
-
-        // Only retry on API overload (503) errors, not rate limit errors
-        if (error.message.includes('Rate limit exceeded') ||
-            error.message.includes('API anahtarı')) {
-          throw error;
-        }
-
-        // Only retry on 503 (overloaded) errors
-        if (attempt < maxAttempts && error.message.includes('503')) {
-          const delay = Math.min(
-            RATE_LIMIT.retryDelay * Math.pow(2, attempt - 1),
-            RATE_LIMIT.maxRetryDelay
-          );
-          console.log(`Model overloaded, retrying in ${delay}ms... (Attempt ${attempt}/${maxAttempts})`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
-      }
+  return payload.questions.map((q, index) => {
+    if (
+      !q || typeof q.question !== 'string' || !q.question.trim() ||
+      !Array.isArray(q.options) || q.options.length !== 4 ||
+      q.options.some(option => typeof option !== 'string' || !option.trim()) ||
+      !Number.isInteger(q.correctAnswer) || q.correctAnswer < 0 || q.correctAnswer > 3
+    ) {
+      throw new Error('Sunucudan gelen quiz yanıtı geçersiz.');
     }
-
-    throw lastError;
-  }
+    return {
+      id: q.id ?? index + 1,
+      question: q.question,
+      options: q.options,
+      correctAnswer: q.correctAnswer,
+      timeLimit: Number.isInteger(q.timeLimit) && q.timeLimit >= 5 && q.timeLimit <= 120 ? q.timeLimit : 15,
+    };
+  });
 }
 
 export const generativeAIService = {
   async generateQuiz(topic) {
-    // Check if API key is available
-    if (!GEMINI_API_KEY || GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY') {
-      throw new Error('Gemini API anahtarı bulunamadı. Lütfen .env dosyanızı kontrol edin.');
+    if (!QUIZ_API_URL) {
+      throw new Error('Quiz sunucusu yapılandırılmamış (EXPO_PUBLIC_QUIZ_API_URL).');
+    }
+    if (!/^https:\/\//i.test(QUIZ_API_URL) && !(__DEV__ && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//i.test(QUIZ_API_URL))) {
+      throw new Error('Quiz sunucusu HTTPS kullanmalıdır.');
+    }
+    if (typeof topic !== 'string' || !topic.trim() || topic.length > 100) {
+      throw new Error('Geçersiz quiz konusu.');
     }
 
-    const prompt = `
-      Lütfen aşağıdaki konsepti kullanarak bir quiz oluşturun:
-
-      **Konu:** ${topic}
-
-      **İstekler:**
-      1.  **Soru Sayısı:** 5 adet çoktan seçmeli soru oluşturun.
-      2.  **Zorluk:** Orta seviyede.
-      3.  **Format:** Her soru için 4 seçenek ve doğru cevabı belirten bir index numarası (0'dan başlayarak).
-      4.  **Bilgi Kaynağı:** Soruları oluştururken Britannica gibi güvenilir kaynaklardan yararlanın. Cevapların doğruluğunu garanti altına almak için teyit edilmiş bilgiler kullanın.
-      5.  **Dil:** Türkçe.
-
-      **Örnek Çıktı Formatı (JSON):**
-      \`\`\`json
-      {
-        "questions": [
-          {
-            "id": 1,
-            "question": "Roma İmparatorluğu'nun ilk imparatoru kimdir?",
-            "options": [
-              "Jül Sezar",
-              "Augustus",
-              "Nero",
-              "Tiberius"
-            ],
-            "correctAnswer": 1,
-            "timeLimit": 15
-          }
-        ]
-      }
-      \`\`\`
-
-      Önemli: Sadece JSON formatında yanıt verin, başka hiçbir açıklama eklemeyin.
-    `;
-
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
     try {
-      // Check rate limit before making the API call
-      RateLimiter.checkRateLimit();
-
-      console.log('Google GenAI ile quiz oluşturuluyor...');
-
-      const response = await genAI.models.generateContent({
-        model: 'gemini-2.0-flash',
-        contents: prompt,
+      const response = await fetch(QUIZ_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: topic.trim() }),
+        signal: controller.signal,
       });
-
-      console.log('GenAI yanıtı alındı');
-
-      if (!response || !response.text) {
-        throw new Error('Empty response from GenAI');
+      if (!response.ok) {
+        throw new Error(response.status === 429
+          ? 'Çok fazla istek gönderildi; lütfen daha sonra tekrar deneyin.'
+          : 'Quiz servisi şu anda kullanılamıyor.');
       }
-
-      const textResponse = response.text;
-      console.log('Text Response length:', textResponse.length);
-
-      // Try to extract JSON from the response
-      const jsonMatch = textResponse.match(/```json([\s\S]*?)```/);
-
-      if (!jsonMatch || !jsonMatch[1]) {
-        console.error("Raw GenAI response:", textResponse.substring(0, 500));
-        // Fallback: try to parse the entire response as JSON
-        try {
-          const quizData = JSON.parse(textResponse.trim());
-          return quizData.questions;
-        } catch {
-          throw new Error("GenAI'den gelen yanıtta geçerli bir JSON formatı bulunamadı.");
-        }
-      }
-
-      const jsonString = jsonMatch[1].trim();
-      const quizData = JSON.parse(jsonString);
-
-      if (!quizData.questions || quizData.questions.length === 0) {
-        throw new Error('Quiz soruları oluşturulamadı.');
-      }
-
-      return quizData.questions;
-
-    } catch (error) {
-      console.error('Quiz oluşturulurken hata oluştu:', error.message);
-
-      // Return mock data if API fails (for development)
-      if (error.message.includes('API anahtarı')) {
-        throw error; // Re-throw API key errors
-      }
-
-      // For other errors, return mock data
-      console.warn('GenAI başarısız, mock data kullanılıyor');
-      return this.getMockQuizData(topic);
+      return validateQuestions(await response.json());
+    } finally {
+      clearTimeout(timeout);
     }
   },
 

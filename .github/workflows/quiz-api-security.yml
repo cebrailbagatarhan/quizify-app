@@ -1,0 +1,41 @@
+name: Quiz API security regression
+
+on:
+  pull_request:
+    paths:
+      - 'services/generativeAIService.js'
+      - 'screens/HomeScreen.js'
+      - 'screens/QuizScreen.js'
+      - 'tests/quizScreenInitialization.test.mjs'
+      - 'tests/quizScreenFinalAnswer.test.mjs'
+      - 'tests/homeScreenQuizRequest.test.mjs'
+      - 'tests/generativeAIService.test.mjs'
+      - '.github/workflows/quiz-api-security.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'services/generativeAIService.js'
+      - 'screens/HomeScreen.js'
+      - 'screens/QuizScreen.js'
+      - 'tests/quizScreenInitialization.test.mjs'
+      - 'tests/quizScreenFinalAnswer.test.mjs'
+      - 'tests/homeScreenQuizRequest.test.mjs'
+      - 'tests/generativeAIService.test.mjs'
+      - '.github/workflows/quiz-api-security.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  client-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Verify quiz API client security contract
+        run: node --test tests/*.test.mjs
