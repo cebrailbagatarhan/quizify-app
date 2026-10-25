@@ -29,6 +29,8 @@ export default function QuizScreen({ route, navigation }) {
   const questionAnimation = useRef(new Animated.Value(1)).current;
   const timerAnimation = useRef(new Animated.Value(1)).current;
   const timerRef = useRef(null); // Timer referansı için
+  // A ref takes effect synchronously, unlike React state updates after rapid taps.
+  const committedQuestionIndexRef = useRef(-1);
 
   useEffect(() => {
     startTimer();
@@ -84,7 +86,8 @@ export default function QuizScreen({ route, navigation }) {
     }).start();
   };
   const handleTimeUp = () => {
-    if (!isAnswered) {
+    if (!isAnswered && committedQuestionIndexRef.current !== currentQuestionIndex) {
+      committedQuestionIndexRef.current = currentQuestionIndex;
       setIsAnswered(true);
 
       // Clear timer when time is up
@@ -109,7 +112,8 @@ export default function QuizScreen({ route, navigation }) {
     }
   };
   const handleAnswerSelect = (optionIndex) => {
-    if (isAnswered) return;
+    if (isAnswered || committedQuestionIndexRef.current === currentQuestionIndex) return;
+    committedQuestionIndexRef.current = currentQuestionIndex;
 
     setSelectedAnswer(optionIndex);
     setIsAnswered(true);
