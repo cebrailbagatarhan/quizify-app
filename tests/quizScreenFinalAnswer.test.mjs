@@ -14,7 +14,7 @@ const createHandlers = new Function('ctx', `
   const {
     isAnswered, currentQuestion, answers, timeLeft, timerRef, questions,
     currentQuestionIndex, questionAnimation, startTime, category, navigation,
-    committedQuestionIndexRef,
+    committedQuestionIndexRef, transitionTimeoutRef,
     setIsAnswered, setAnswers, setSelectedAnswer, setCurrentQuestionIndex, setTimeLeft,
     setTimeout, clearInterval, Haptics, Animated,
   } = ctx;
@@ -34,6 +34,7 @@ for (const mode of ['answer', 'timeout']) {
       answers: [],
       timeLeft: 10,
       timerRef: { current: null },
+      transitionTimeoutRef: { current: null },
       committedQuestionIndexRef: { current: -1 },
       questions: [question],
       currentQuestionIndex: 0,
@@ -80,6 +81,7 @@ for (const sequence of [
       answers: [],
       timeLeft: 10,
       timerRef: { current: null },
+      transitionTimeoutRef: { current: null },
       committedQuestionIndexRef,
       questions: [question],
       currentQuestionIndex: 0,
@@ -124,6 +126,7 @@ test('expired question resets next countdown before unlocking the next question'
     answers: [],
     timeLeft: 0,
     timerRef: { current: null },
+    transitionTimeoutRef: { current: null },
     committedQuestionIndexRef: { current: -1 },
     questions,
     currentQuestionIndex: 0,
@@ -150,3 +153,66 @@ test('expired question resets next countdown before unlocking the next question'
   assert.ok(unlockIndex > resetIndex, 'reset countdown before unlocking the next question');
   assert.ok(events.some(([kind, value]) => kind === 'index' && value === 1));
 });
+
+for (const mode of ['answer', 'timeout']) {
+  test(`leaving quiz cancels the pending ${mode} transition`, () => {
+    const question = { id: 1, correctAnswer: 0, timeLimit: 10 };
+    const pending = new Map();
+    const navigations = [];
+    let nextId = 1;
+    const transitionTimeoutRef = { current: null };
+    const clearTimeout = id => pending.delete(id);
+    const ctx = {
+      isAnswered: false,
+      currentQuestion: question,
+      answers: [],
+      timeLeft: 8,
+      timerRef: { current: null },
+      transitionTimeoutRef,
+      committedQuestionIndexRef: { current: -1 },
+      questions: [question],
+      currentQuestionIndex: 0,
+      questionAnimation: {},
+      startTime: Date.now(),
+      category: { name: 'Tarih' },
+      navigation: { replace: (...args) => navigations.push(args) },
+      setIsAnswered: () => {},
+      setAnswers: () => {},
+      setSelectedAnswer: () => {},
+      setCurrentQuestionIndex: () => {},
+      setTimeLeft: () => {},
+      setTimeout: callback => {
+        const id = nextId++;
+        pending.set(id, callback);
+        return id;
+      },
+      clearInterval: () => {},
+      Haptics: { impactAsync: () => {}, ImpactFeedbackStyle: { Light: 1, Heavy: 2 } },
+      Animated: { timing: () => ({ start: callback => callback?.() }) },
+    };
+    const handlers = createHandlers(ctx);
+    if (mode === 'answer') handlers.handleAnswerSelect(0);
+    else handlers.handleTimeUp();
+
+    assert.equal(pending.size, 1, 'question transition is pending');
+    assert.notEqual(transitionTimeoutRef.current, null);
+
+    // Execute the real unmount effect's cleanup, not a copy of its logic.
+    const cleanupStart = source.indexOf('  // Component unmount time cleanup');
+    const cleanupEnd = source.indexOf('  const startTimer =', cleanupStart);
+    assert.ok(cleanupStart >= 0 && cleanupEnd > cleanupStart);
+    const registerCleanup = new Function(
+      'useEffect', 'timerRef', 'transitionTimeoutRef', 'clearInterval', 'clearTimeout',
+      source.slice(cleanupStart, cleanupEnd),
+    );
+    let unmount;
+    registerCleanup(effect => { unmount = effect(); }, ctx.timerRef,
+      transitionTimeoutRef, () => {}, clearTimeout);
+    assert.equal(typeof unmount, 'function');
+    unmount();
+
+    assert.equal(pending.size, 0, 'no callback may run after leaving the screen');
+    assert.equal(transitionTimeoutRef.current, null);
+    assert.equal(navigations.length, 0);
+  });
+}
