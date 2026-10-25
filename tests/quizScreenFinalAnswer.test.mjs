@@ -216,3 +216,50 @@ for (const mode of ['answer', 'timeout']) {
     assert.equal(navigations.length, 0);
   });
 }
+
+
+test('tap at zero seconds is a timeout even before the timeout effect runs', () => {
+  const question = { id: 1, correctAnswer: 2, timeLimit: 15 };
+  const committedQuestionIndexRef = { current: -1 };
+  let recordedAnswers;
+  let scheduled;
+  let navigationResult;
+  let hapticCalls = 0;
+  const ctx = {
+    isAnswered: false, // The timeout effect has not yet committed.
+    currentQuestion: question,
+    answers: [],
+    timeLeft: 0,
+    timerRef: { current: null },
+    transitionTimeoutRef: { current: null },
+    committedQuestionIndexRef,
+    questions: [question],
+    currentQuestionIndex: 0,
+    questionAnimation: {},
+    startTime: Date.now(),
+    category: { name: 'Tarih' },
+    navigation: { replace: (screen, params) => { navigationResult = { screen, params }; } },
+    setIsAnswered: () => {},
+    setAnswers: value => { recordedAnswers = value; },
+    setSelectedAnswer: () => {},
+    setCurrentQuestionIndex: () => {},
+    setTimeLeft: () => {},
+    setTimeout: callback => { scheduled = callback; },
+    clearInterval: () => {},
+    Haptics: {
+      impactAsync: () => { hapticCalls++; },
+      ImpactFeedbackStyle: { Light: 1, Heavy: 2 },
+    },
+    Animated: { timing: () => ({ start: callback => callback?.() }) },
+  };
+
+  createHandlers(ctx).handleAnswerSelect(2);
+  assert.equal(recordedAnswers.length, 1);
+  assert.equal(recordedAnswers[0].selectedAnswer, null, 'expired answer must not score');
+  assert.equal(recordedAnswers[0].isCorrect, false);
+  assert.equal(committedQuestionIndexRef.current, 0);
+  assert.equal(hapticCalls, 0, 'no correct-answer haptic after timeout');
+  scheduled();
+  assert.equal(navigationResult.screen, 'Results');
+  assert.deepEqual(navigationResult.params.answers, recordedAnswers);
+});
