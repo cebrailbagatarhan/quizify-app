@@ -120,6 +120,12 @@ export default function QuizScreen({ route, navigation }) {
   };
   const handleAnswerSelect = (optionIndex) => {
     if (isAnswered || committedQuestionIndexRef.current === currentQuestionIndex) return;
+    // A tap can arrive after the countdown renders 0 but before the timeout effect.
+    // Record it as expired rather than awarding a correct answer.
+    if (timeLeft <= 0) {
+      handleTimeUp();
+      return;
+    }
     committedQuestionIndexRef.current = currentQuestionIndex;
 
     setSelectedAnswer(optionIndex);
