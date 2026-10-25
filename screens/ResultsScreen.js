@@ -18,7 +18,7 @@ import { StatsManager } from '../utils/statsManager';
 const { width } = Dimensions.get('window');
 
 export default function ResultsScreen({ route, navigation }) {
-  const { category, answers, totalTime, totalQuestions } = route.params;
+  const { category, questions = [], answers, totalTime, totalQuestions } = route.params;
   const [isSaved, setIsSaved] = useState(false);
 
   const correctAnswers = answers.filter(answer => answer.isCorrect).length;
@@ -109,8 +109,14 @@ export default function ResultsScreen({ route, navigation }) {
     }
   };
   const QuestionResult = ({ answer, questionIndex }) => {
-    const questions = require('../data/newQuizData').quizQuestions[category.id];
     const question = questions[questionIndex];
+    if (!question) {
+      return (
+        <View style={styles.questionResult}>
+          <Text style={styles.questionTextSmall}>Soru detayları bulunamadı.</Text>
+        </View>
+      );
+    }
 
     return (
       <View style={styles.questionResult}>
@@ -241,7 +247,7 @@ export default function ResultsScreen({ route, navigation }) {
 
             <TouchableOpacity
               style={[styles.actionButton, styles.retryButton]}
-              onPress={() => navigation.replace('Quiz', { category })}
+              onPress={() => navigation.replace('Quiz', { category, questions })}
             >
               <Text style={styles.actionButtonText}>🔄 Tekrar Çöz</Text>
             </TouchableOpacity>
