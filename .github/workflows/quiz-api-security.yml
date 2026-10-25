@@ -5,6 +5,8 @@ on:
     paths:
       - 'services/generativeAIService.js'
       - 'screens/HomeScreen.js'
+      - 'screens/QuizScreen.js'
+      - 'tests/quizScreenInitialization.test.mjs'
       - 'tests/homeScreenQuizRequest.test.mjs'
       - 'tests/generativeAIService.test.mjs'
       - '.github/workflows/quiz-api-security.yml'
@@ -13,6 +15,8 @@ on:
     paths:
       - 'services/generativeAIService.js'
       - 'screens/HomeScreen.js'
+      - 'screens/QuizScreen.js'
+      - 'tests/quizScreenInitialization.test.mjs'
       - 'tests/homeScreenQuizRequest.test.mjs'
       - 'tests/generativeAIService.test.mjs'
       - '.github/workflows/quiz-api-security.yml'
