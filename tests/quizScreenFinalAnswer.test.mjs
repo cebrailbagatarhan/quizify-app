@@ -15,7 +15,7 @@ const createHandlers = new Function('ctx', `
     isAnswered, currentQuestion, answers, timeLeft, timerRef, questions,
     currentQuestionIndex, questionAnimation, startTime, category, navigation,
     committedQuestionIndexRef,
-    setIsAnswered, setAnswers, setSelectedAnswer, setCurrentQuestionIndex,
+    setIsAnswered, setAnswers, setSelectedAnswer, setCurrentQuestionIndex, setTimeLeft,
     setTimeout, clearInterval, Haptics, Animated,
   } = ctx;
   ${handlers}
@@ -110,3 +110,43 @@ for (const sequence of [
     assert.deepEqual(navigations[0][1].answers, queuedAnswers[0]);
   });
 }
+
+test('expired question resets next countdown before unlocking the next question', () => {
+  const questions = [
+    { id: 1, correctAnswer: 0, timeLimit: 5 },
+    { id: 2, correctAnswer: 1, timeLimit: 30 },
+  ];
+  const events = [];
+  let transition;
+  const ctx = {
+    isAnswered: false,
+    currentQuestion: questions[0],
+    answers: [],
+    timeLeft: 0,
+    timerRef: { current: null },
+    committedQuestionIndexRef: { current: -1 },
+    questions,
+    currentQuestionIndex: 0,
+    questionAnimation: {},
+    startTime: Date.now(),
+    category: { name: 'Tarih' },
+    navigation: { replace: () => { throw new Error('not the final question'); } },
+    setIsAnswered: value => events.push(['answered', value]),
+    setAnswers: () => {},
+    setSelectedAnswer: () => {},
+    setCurrentQuestionIndex: value => events.push(['index', value]),
+    setTimeLeft: value => events.push(['time', value]),
+    setTimeout: callback => { transition = callback; },
+    clearInterval: () => {},
+    Haptics: { impactAsync: () => {}, ImpactFeedbackStyle: { Light: 1, Heavy: 2 } },
+    Animated: { timing: () => ({ start: callback => callback?.() }) },
+  };
+  createHandlers(ctx).handleTimeUp();
+  assert.equal(typeof transition, 'function');
+  transition();
+  const resetIndex = events.findIndex(([kind, value]) => kind === 'time' && value === 30);
+  const unlockIndex = events.findIndex(([kind, value]) => kind === 'answered' && value === false);
+  assert.ok(resetIndex >= 0, 'the next question must not inherit a zero-second countdown');
+  assert.ok(unlockIndex > resetIndex, 'reset countdown before unlocking the next question');
+  assert.ok(events.some(([kind, value]) => kind === 'index' && value === 1));
+});
