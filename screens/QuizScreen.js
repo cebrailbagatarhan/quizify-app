@@ -155,7 +155,11 @@ export default function QuizScreen({ route, navigation }) {
         duration: 300,
         useNativeDriver: true,
       }).start(() => {
-        setCurrentQuestionIndex(currentQuestionIndex + 1);
+        const nextIndex = currentQuestionIndex + 1;
+        setCurrentQuestionIndex(nextIndex);
+        // Reset the countdown in the same React batch as unlocking the next question.
+        // Otherwise timeLeft=0 can trigger the timeout effect for the new question.
+        setTimeLeft(questions[nextIndex]?.timeLimit || 10);
         setSelectedAnswer(null);
         setIsAnswered(false);
         Animated.timing(questionAnimation, {
