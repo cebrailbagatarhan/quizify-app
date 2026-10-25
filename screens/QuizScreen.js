@@ -31,6 +31,8 @@ export default function QuizScreen({ route, navigation }) {
   const timerRef = useRef(null); // Timer referansı için
   // A ref takes effect synchronously, unlike React state updates after rapid taps.
   const committedQuestionIndexRef = useRef(-1);
+  // Cancel delayed question/result navigation when the screen is left.
+  const transitionTimeoutRef = useRef(null);
 
   useEffect(() => {
     startTimer();
@@ -54,6 +56,10 @@ export default function QuizScreen({ route, navigation }) {
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
+      }
+      if (transitionTimeoutRef.current !== null) {
+        clearTimeout(transitionTimeoutRef.current);
+        transitionTimeoutRef.current = null;
       }
     };
   }, []);
@@ -106,7 +112,8 @@ export default function QuizScreen({ route, navigation }) {
       const updatedAnswers = [...answers, newAnswer];
       setAnswers(updatedAnswers);
 
-      setTimeout(() => {
+      transitionTimeoutRef.current = setTimeout(() => {
+        transitionTimeoutRef.current = null;
         nextQuestion(updatedAnswers);
       }, 1500);
     }
@@ -143,7 +150,8 @@ export default function QuizScreen({ route, navigation }) {
     const updatedAnswers = [...answers, newAnswer];
     setAnswers(updatedAnswers);
 
-    setTimeout(() => {
+    transitionTimeoutRef.current = setTimeout(() => {
+      transitionTimeoutRef.current = null;
       nextQuestion(updatedAnswers);
     }, 1500);
   };
