@@ -100,10 +100,11 @@ export default function QuizScreen({ route, navigation }) {
         isCorrect: false,
         timeSpent,
       };
-      setAnswers([...answers, newAnswer]);
+      const updatedAnswers = [...answers, newAnswer];
+      setAnswers(updatedAnswers);
 
       setTimeout(() => {
-        nextQuestion();
+        nextQuestion(updatedAnswers);
       }, 1500);
     }
   };
@@ -135,14 +136,15 @@ export default function QuizScreen({ route, navigation }) {
       timeSpent,
     };
 
-    setAnswers([...answers, newAnswer]);
+    const updatedAnswers = [...answers, newAnswer];
+    setAnswers(updatedAnswers);
 
     setTimeout(() => {
-      nextQuestion();
+      nextQuestion(updatedAnswers);
     }, 1500);
   };
 
-  const nextQuestion = () => {
+  const nextQuestion = (completedAnswers) => {
     if (currentQuestionIndex < questions.length - 1) {
       Animated.timing(questionAnimation, {
         toValue: 0,
@@ -159,15 +161,15 @@ export default function QuizScreen({ route, navigation }) {
         }).start();
       });
     } else {
-      finishQuiz();
+      finishQuiz(completedAnswers);
     }
   };
 
-  const finishQuiz = () => {
+  const finishQuiz = (completedAnswers) => {
     const totalTime = Math.floor((Date.now() - startTime) / 1000);
     navigation.replace('Results', {
       category,
-      answers: [...answers],
+      answers: completedAnswers,
       totalTime,
       totalQuestions: questions.length,
     });
