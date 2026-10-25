@@ -14,6 +14,7 @@ const createHandlers = new Function('ctx', `
   const {
     isAnswered, currentQuestion, answers, timeLeft, timerRef, questions,
     currentQuestionIndex, questionAnimation, startTime, category, navigation,
+    committedQuestionIndexRef,
     setIsAnswered, setAnswers, setSelectedAnswer, setCurrentQuestionIndex,
     setTimeout, clearInterval, Haptics, Animated,
   } = ctx;
@@ -33,6 +34,7 @@ for (const mode of ['answer', 'timeout']) {
       answers: [],
       timeLeft: 10,
       timerRef: { current: null },
+      committedQuestionIndexRef: { current: -1 },
       questions: [question],
       currentQuestionIndex: 0,
       questionAnimation: {},
@@ -58,5 +60,53 @@ for (const mode of ['answer', 'timeout']) {
     assert.deepEqual(result.params.answers, stateAnswers);
     assert.equal(result.params.answers[0].isCorrect, mode === 'answer');
     assert.equal(result.params.totalQuestions, 1);
+  });
+}
+
+for (const sequence of [
+  ['answer', 'answer'],
+  ['answer', 'timeout'],
+  ['timeout', 'answer'],
+]) {
+  test(`only one answer is recorded for a rapid ${sequence.join(' then ')} race`, () => {
+    const question = { id: 1, correctAnswer: 2, timeLimit: 15 };
+    const queuedAnswers = [];
+    const scheduled = [];
+    const navigations = [];
+    const committedQuestionIndexRef = { current: -1 };
+    const ctx = {
+      isAnswered: false, // React has not re-rendered between calls.
+      currentQuestion: question,
+      answers: [],
+      timeLeft: 10,
+      timerRef: { current: null },
+      committedQuestionIndexRef,
+      questions: [question],
+      currentQuestionIndex: 0,
+      questionAnimation: {},
+      startTime: Date.now(),
+      category: { name: 'Tarih' },
+      navigation: { replace: (...args) => navigations.push(args) },
+      setIsAnswered: () => {},
+      setAnswers: value => queuedAnswers.push(value),
+      setSelectedAnswer: () => {},
+      setCurrentQuestionIndex: () => {},
+      setTimeout: cb => { scheduled.push(cb); },
+      clearInterval: () => {},
+      Haptics: { impactAsync: () => {}, ImpactFeedbackStyle: { Light: 1, Heavy: 2 } },
+      Animated: { timing: () => ({ start: cb => cb?.() }) },
+    };
+    const handlers = createHandlers(ctx);
+    for (const action of sequence) {
+      if (action === 'answer') handlers.handleAnswerSelect(2);
+      else handlers.handleTimeUp();
+    }
+    assert.equal(queuedAnswers.length, 1, 'only one state update is queued');
+    assert.equal(scheduled.length, 1, 'only one transition is scheduled');
+    assert.equal(committedQuestionIndexRef.current, 0);
+    assert.equal(queuedAnswers[0][0].selectedAnswer, sequence[0] === 'timeout' ? null : 2);
+    scheduled[0]();
+    assert.equal(navigations.length, 1, 'results navigation happens once');
+    assert.deepEqual(navigations[0][1].answers, queuedAnswers[0]);
   });
 }
