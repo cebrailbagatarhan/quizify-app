@@ -17,9 +17,10 @@ const { width, height } = Dimensions.get('window');
 export default function QuizScreen({ route, navigation }) {
   const { category, questions } = route.params;
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  // Resolve the question before its time limit is used for initial state.
+  const currentQuestion = questions[currentQuestionIndex];
   const [answers, setAnswers] = useState([]);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
-  const currentQuestion = questions[currentQuestionIndex];
   const [timeLeft, setTimeLeft] = useState(currentQuestion?.timeLimit || 10);
   const [isAnswered, setIsAnswered] = useState(false);
   const [startTime] = useState(Date.now());
