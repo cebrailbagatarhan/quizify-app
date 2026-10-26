@@ -11,6 +11,8 @@ on:
       - 'tests/quizScreenInitialization.test.mjs'
       - 'tests/quizScreenFinalAnswer.test.mjs'
       - 'tests/homeScreenQuizRequest.test.mjs'
+      - 'tests/homeDashboard.test.mjs'
+      - 'utils/homeStats.js'
       - 'tests/generativeAIService.test.mjs'
       - '.github/workflows/quiz-api-security.yml'
   push:
@@ -24,6 +26,8 @@ on:
       - 'tests/quizScreenInitialization.test.mjs'
       - 'tests/quizScreenFinalAnswer.test.mjs'
       - 'tests/homeScreenQuizRequest.test.mjs'
+      - 'tests/homeDashboard.test.mjs'
+      - 'utils/homeStats.js'
       - 'tests/generativeAIService.test.mjs'
       - '.github/workflows/quiz-api-security.yml'
 
