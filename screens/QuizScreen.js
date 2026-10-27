@@ -17,6 +17,8 @@ const { width, height } = Dimensions.get('window');
 export default function QuizScreen({ route, navigation }) {
   const { category, questions } = route.params;
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  // Resolve the question before its time limit is used for initial state.
+  const currentQuestion = questions[currentQuestionIndex];
   const [answers, setAnswers] = useState([]);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [timeLeft, setTimeLeft] = useState(currentQuestion?.timeLimit || 10);
@@ -27,8 +29,11 @@ export default function QuizScreen({ route, navigation }) {
   const questionAnimation = useRef(new Animated.Value(1)).current;
   const timerAnimation = useRef(new Animated.Value(1)).current;
   const timerRef = useRef(null); // Timer referansı için
+  // A ref takes effect synchronously, unlike React state updates after rapid taps.
+  const committedQuestionIndexRef = useRef(-1);
+  // Cancel delayed question/result navigation when the screen is left.
+  const transitionTimeoutRef = useRef(null);
 
-  const currentQuestion = questions[currentQuestionIndex];
   useEffect(() => {
     startTimer();
     animateProgress();
@@ -51,6 +56,10 @@ export default function QuizScreen({ route, navigation }) {
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
+      }
+      if (transitionTimeoutRef.current !== null) {
+        clearTimeout(transitionTimeoutRef.current);
+        transitionTimeoutRef.current = null;
       }
     };
   }, []);
@@ -83,7 +92,8 @@ export default function QuizScreen({ route, navigation }) {
     }).start();
   };
   const handleTimeUp = () => {
-    if (!isAnswered) {
+    if (!isAnswered && committedQuestionIndexRef.current !== currentQuestionIndex) {
+      committedQuestionIndexRef.current = currentQuestionIndex;
       setIsAnswered(true);
 
       // Clear timer when time is up
@@ -102,13 +112,21 @@ export default function QuizScreen({ route, navigation }) {
       const updatedAnswers = [...answers, newAnswer];
       setAnswers(updatedAnswers);
 
-      setTimeout(() => {
+      transitionTimeoutRef.current = setTimeout(() => {
+        transitionTimeoutRef.current = null;
         nextQuestion(updatedAnswers);
       }, 1500);
     }
   };
   const handleAnswerSelect = (optionIndex) => {
-    if (isAnswered) return;
+    if (isAnswered || committedQuestionIndexRef.current === currentQuestionIndex) return;
+    // A tap can arrive after the countdown renders 0 but before the timeout effect.
+    // Record it as expired rather than awarding a correct answer.
+    if (timeLeft <= 0) {
+      handleTimeUp();
+      return;
+    }
+    committedQuestionIndexRef.current = currentQuestionIndex;
 
     setSelectedAnswer(optionIndex);
     setIsAnswered(true);
@@ -138,19 +156,24 @@ export default function QuizScreen({ route, navigation }) {
     const updatedAnswers = [...answers, newAnswer];
     setAnswers(updatedAnswers);
 
-    setTimeout(() => {
+    transitionTimeoutRef.current = setTimeout(() => {
+      transitionTimeoutRef.current = null;
       nextQuestion(updatedAnswers);
     }, 1500);
   };
 
-  const nextQuestion = (completedAnswers = answers) => {
+  const nextQuestion = (completedAnswers) => {
     if (currentQuestionIndex < questions.length - 1) {
       Animated.timing(questionAnimation, {
         toValue: 0,
         duration: 300,
         useNativeDriver: true,
       }).start(() => {
-        setCurrentQuestionIndex(currentQuestionIndex + 1);
+        const nextIndex = currentQuestionIndex + 1;
+        setCurrentQuestionIndex(nextIndex);
+        // Reset the countdown in the same React batch as unlocking the next question.
+        // Otherwise timeLeft=0 can trigger the timeout effect for the new question.
+        setTimeLeft(questions[nextIndex]?.timeLimit || 10);
         setSelectedAnswer(null);
         setIsAnswered(false);
         Animated.timing(questionAnimation, {
@@ -164,7 +187,7 @@ export default function QuizScreen({ route, navigation }) {
     }
   };
 
-  const finishQuiz = (completedAnswers = answers) => {
+  const finishQuiz = (completedAnswers) => {
     const totalTime = Math.floor((Date.now() - startTime) / 1000);
     navigation.replace('Results', {
       category,
