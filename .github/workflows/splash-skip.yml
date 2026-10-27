@@ -1,0 +1,23 @@
+name: Splash skip regression
+
+on:
+  pull_request:
+    paths:
+      - 'screens/SplashScreen.js'
+      - 'tests/splashSkip.test.mjs'
+      - '.github/workflows/splash-skip.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  splash-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run splash and existing JS regression tests
+        run: node --test tests/*.test.mjs
