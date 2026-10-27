@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,16 +15,40 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { categories } from '../data/newQuizData';
 import { generativeAIService } from '../services/generativeAIService';
+import { useFocusEffect } from '@react-navigation/native';
+import { StatsManager } from '../utils/statsManager';
+import { displayUserName, countTodaysQuizzes } from '../utils/homeStats';
 
 const { width } = Dimensions.get('window');
 
 export default function HomeScreen({ navigation }) {
-  const [userName] = useState('Kullanıcı');
-  const [dailyQuizzes] = useState(2);
+  const [userName, setUserName] = useState('Kullanıcı');
+  const [dailyQuizzes, setDailyQuizzes] = useState(0);
   const [loading, setLoading] = useState(false);
   const [loadingText, setLoadingText] = useState('');
   // State updates are async: a ref blocks rapid double taps immediately.
   const quizRequestInFlight = useRef(false);
+
+  // Refresh on every visit, including after changing the name or finishing a quiz.
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    const loadDashboard = async () => {
+      try {
+        const [profile, history] = await Promise.all([
+          StatsManager.getProfile(),
+          StatsManager.getQuizHistory(),
+        ]);
+        if (active) {
+          setUserName(displayUserName(profile));
+          setDailyQuizzes(countTodaysQuizzes(history));
+        }
+      } catch (error) {
+        console.error('Error loading home dashboard:', error);
+      }
+    };
+    loadDashboard();
+    return () => { active = false; };
+  }, []));
 
   const animatedValues = useRef(
     categories.map(() => new Animated.Value(0))
