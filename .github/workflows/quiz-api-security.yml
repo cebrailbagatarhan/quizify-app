@@ -12,6 +12,9 @@ on:
       - 'tests/quizScreenFinalAnswer.test.mjs'
       - 'tests/homeScreenQuizRequest.test.mjs'
       - 'tests/generativeAIService.test.mjs'
+      - 'scripts/check-client-secrets.mjs'
+      - 'package.json'
+      - 'babel.config.js'
       - '.github/workflows/quiz-api-security.yml'
   push:
     branches: [main]
@@ -25,6 +28,9 @@ on:
       - 'tests/quizScreenFinalAnswer.test.mjs'
       - 'tests/homeScreenQuizRequest.test.mjs'
       - 'tests/generativeAIService.test.mjs'
+      - 'scripts/check-client-secrets.mjs'
+      - 'package.json'
+      - 'babel.config.js'
       - '.github/workflows/quiz-api-security.yml'
 
 permissions:
@@ -41,5 +47,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - name: Verify no provider key in client sources
+        run: node scripts/check-client-secrets.mjs
       - name: Verify quiz API client security contract
         run: node --test tests/*.test.mjs
