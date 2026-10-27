@@ -256,7 +256,7 @@ export default function ProfileScreen({ navigation }) {
             {recentQuizzes.length === 0 ? (
               <Text style={styles.recentEmpty}>Henüz tamamlanmış quiz yok.</Text>
             ) : recentQuizzes.map((quiz, index) => (
-              <View key={`${'${quiz.completedAt}'}-${'${index}'}`} style={styles.recentRow}>
+              <View key={quiz.completedAt + '-' + index} style={styles.recentRow}>
                 <Text style={styles.recentCategory}>{quiz.category}</Text>
                 <Text style={styles.recentMeta}>
                   %{quiz.score} · {new Date(quiz.completedAt).toLocaleDateString('tr-TR')}
