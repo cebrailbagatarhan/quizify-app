@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatsManager } from '../utils/statsManager';
+import { getRecentQuizzes } from '../utils/recentQuizzes';
 
 export default function ProfileScreen({ navigation }) {
   const [stats, setStats] = useState(null);
@@ -21,6 +22,7 @@ export default function ProfileScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [showNameModal, setShowNameModal] = useState(false);
   const [newUserName, setNewUserName] = useState('');
+  const [recentQuizzes, setRecentQuizzes] = useState([]);
 
   // Load data when component mounts
   useEffect(() => {
@@ -30,12 +32,14 @@ export default function ProfileScreen({ navigation }) {
   const loadUserData = async () => {
     try {
       setLoading(true);
-      const [userStats, userProfile] = await Promise.all([
+      const [userStats, userProfile, history] = await Promise.all([
         StatsManager.getStats(),
-        StatsManager.getProfile()
+        StatsManager.getProfile(),
+        StatsManager.getQuizHistory(),
       ]);
       setStats(userStats);
       setProfile(userProfile);
+      setRecentQuizzes(getRecentQuizzes(history));
     } catch (error) {
       console.error('Error loading user data:', error);
       Alert.alert('Hata', 'Kullanıcı verileri yüklenemedi');
@@ -246,6 +250,21 @@ export default function ProfileScreen({ navigation }) {
           {/* Weekly Chart */}
           <WeeklyChart />
 
+          {/* Recent quiz history (read-only) */}
+          <View style={styles.recentSection}>
+            <Text style={styles.recentTitle}>Son Quizler</Text>
+            {recentQuizzes.length === 0 ? (
+              <Text style={styles.recentEmpty}>Henüz tamamlanmış quiz yok.</Text>
+            ) : recentQuizzes.map((quiz, index) => (
+              <View key={`${'${quiz.completedAt}'}-${'${index}'}`} style={styles.recentRow}>
+                <Text style={styles.recentCategory}>{quiz.category}</Text>
+                <Text style={styles.recentMeta}>
+                  %{quiz.score} · {new Date(quiz.completedAt).toLocaleDateString('tr-TR')}
+                </Text>
+              </View>
+            ))}
+          </View>
+
           {/* Settings */}
           <View style={styles.settingsSection}>
             <Text style={styles.sectionTitle}>Ayarlar</Text>
@@ -354,6 +373,16 @@ export default function ProfileScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  recentSection: {
+    backgroundColor: 'white', borderRadius: 15, padding: 20, marginBottom: 20,
+  },
+  recentTitle: { fontSize: 18, fontWeight: 'bold', color: '#2d3748', marginBottom: 10 },
+  recentEmpty: { color: '#718096', fontSize: 14 },
+  recentRow: {
+    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#e2e8f0',
+  },
+  recentCategory: { fontSize: 16, color: '#2d3748', fontWeight: '600' },
+  recentMeta: { fontSize: 13, color: '#718096', marginTop: 3 },
   container: {
     flex: 1,
   },
