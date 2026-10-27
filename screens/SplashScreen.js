@@ -4,23 +4,41 @@ import {
   Text,
   StyleSheet,
   Animated,
-  Dimensions,
+  TouchableOpacity,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-
-const { width, height } = Dimensions.get('window');
 
 export default function SplashScreen({ navigation }) {
   const logoScale = useRef(new Animated.Value(0)).current;
   const logoOpacity = useRef(new Animated.Value(0)).current;
   const textOpacity = useRef(new Animated.Value(0)).current;
+  const animationRef = useRef(null);
+  const navigationTimeoutRef = useRef(null);
+  const hasNavigatedRef = useRef(false);
 
   useEffect(() => {
     startAnimation();
+    return () => {
+      if (navigationTimeoutRef.current !== null) {
+        clearTimeout(navigationTimeoutRef.current);
+        navigationTimeoutRef.current = null;
+      }
+      animationRef.current?.stop();
+    };
   }, []);
 
+  const goHome = () => {
+    if (hasNavigatedRef.current) return;
+    hasNavigatedRef.current = true;
+    if (navigationTimeoutRef.current !== null) {
+      clearTimeout(navigationTimeoutRef.current);
+      navigationTimeoutRef.current = null;
+    }
+    navigation.replace('Home');
+  };
+
   const startAnimation = () => {
-    Animated.sequence([
+    animationRef.current = Animated.sequence([
       Animated.parallel([
         Animated.timing(logoScale, {
           toValue: 1,
@@ -38,10 +56,10 @@ export default function SplashScreen({ navigation }) {
         duration: 800,
         useNativeDriver: true,
       }),
-    ]).start(() => {
-      setTimeout(() => {
-        navigation.replace('Home');
-      }, 1500);
+    ]);
+    animationRef.current.start(({ finished }) => {
+      if (!finished || hasNavigatedRef.current) return;
+      navigationTimeoutRef.current = setTimeout(goHome, 1500);
     });
   };
 
@@ -68,6 +86,14 @@ export default function SplashScreen({ navigation }) {
           <Text style={styles.tagline}>Bilgiyle Eğlen!</Text>
         </Animated.View>
       </View>
+      <TouchableOpacity
+        style={styles.skipButton}
+        accessibilityRole="button"
+        accessibilityLabel="Tanıtımı geç ve ana menüye git"
+        onPress={goHome}
+      >
+        <Text style={styles.skipText}>Geç</Text>
+      </TouchableOpacity>
     </LinearGradient>
   );
 }
@@ -105,5 +131,18 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.9)',
     fontWeight: '500',
   },
+  skipButton: {
+    position: 'absolute',
+    bottom: 36,
+    right: 24,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+  },
+  skipText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
 });
-
