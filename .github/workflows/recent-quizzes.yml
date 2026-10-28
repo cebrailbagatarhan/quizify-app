@@ -6,6 +6,7 @@ on:
       - 'screens/ProfileScreen.js'
       - 'utils/recentQuizzes.js'
       - 'tests/recentQuizzes.test.cjs'
+      - 'tests/recentAverage.test.mjs'
       - '.github/workflows/recent-quizzes.yml'
   push:
     branches: [main]
@@ -13,6 +14,7 @@ on:
       - 'screens/ProfileScreen.js'
       - 'utils/recentQuizzes.js'
       - 'tests/recentQuizzes.test.cjs'
+      - 'tests/recentAverage.test.mjs'
       - '.github/workflows/recent-quizzes.yml'
 
 permissions:
@@ -27,4 +29,4 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: node --test tests/recentQuizzes.test.cjs
+      - run: node --test tests/recentQuizzes.test.cjs tests/recentAverage.test.mjs
