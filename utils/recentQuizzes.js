@@ -21,4 +21,11 @@ function getRecentQuizzes(history, limit = 5) {
     .map(({ category, score, completedAt }) => ({ category, score, completedAt }));
 }
 
-module.exports = { getRecentQuizzes };
+// Read-only average of the newest valid results; null distinguishes no data from 0%.
+function getRecentAverageScore(history, limit = 5) {
+  const recent = getRecentQuizzes(history, limit);
+  if (recent.length === 0) return null;
+  return Math.round(recent.reduce((sum, quiz) => sum + quiz.score, 0) / recent.length);
+}
+
+module.exports = { getRecentQuizzes, getRecentAverageScore };

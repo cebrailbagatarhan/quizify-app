@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatsManager } from '../utils/statsManager';
-import { getRecentQuizzes } from '../utils/recentQuizzes';
+import { getRecentQuizzes, getRecentAverageScore } from '../utils/recentQuizzes';
 
 export default function ProfileScreen({ navigation }) {
   const [stats, setStats] = useState(null);
@@ -120,6 +120,7 @@ export default function ProfileScreen({ navigation }) {
     ? Math.round(stats.totalTime / stats.totalQuizzes)
     : 0;
 
+  const recentAverageScore = getRecentAverageScore(recentQuizzes);
   const bestCategory = StatsManager.getBestCategory(stats.categoryStats);
   const userLevel = StatsManager.calculateLevel(stats.totalQuizzes);
 
@@ -253,6 +254,11 @@ export default function ProfileScreen({ navigation }) {
           {/* Recent quiz history (read-only) */}
           <View style={styles.recentSection}>
             <Text style={styles.recentTitle}>Son Quizler</Text>
+            {recentAverageScore !== null && (
+              <Text style={styles.recentMeta}>
+                Son {recentQuizzes.length} quiz ortalaması: %{recentAverageScore}
+              </Text>
+            )}
             {recentQuizzes.length === 0 ? (
               <Text style={styles.recentEmpty}>Henüz tamamlanmış quiz yok.</Text>
             ) : recentQuizzes.map((quiz, index) => (
