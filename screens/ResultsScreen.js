@@ -14,12 +14,15 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { StatsManager } from '../utils/statsManager';
+import { getReviewItems } from '../utils/resultReview';
 
 const { width } = Dimensions.get('window');
 
 export default function ResultsScreen({ route, navigation }) {
   const { category, questions = [], answers, totalTime, totalQuestions } = route.params;
   const [isSaved, setIsSaved] = useState(false);
+  const [showIncorrectOnly, setShowIncorrectOnly] = useState(false);
+  const reviewItems = getReviewItems(answers, showIncorrectOnly);
 
   const correctAnswers = answers.filter(answer => answer.isCorrect).length;
   const percentage = Math.round((correctAnswers / totalQuestions) * 100);
@@ -222,7 +225,21 @@ export default function ResultsScreen({ route, navigation }) {
             ]}
           >
             <Text style={styles.detailsTitle}>Soru Detayları</Text>
-            {answers.map((answer, index) => (
+            <TouchableOpacity
+              style={styles.reviewFilterButton}
+              onPress={() => setShowIncorrectOnly((value) => !value)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: showIncorrectOnly }}
+              accessibilityLabel="Yalnızca yanlış cevapları göster"
+            >
+              <Text style={styles.reviewFilterText}>
+                {showIncorrectOnly ? '✓ Yalnızca yanlışlar' : 'Yalnızca yanlışları göster'}
+              </Text>
+            </TouchableOpacity>
+            {reviewItems.length === 0 && (
+              <Text style={styles.reviewEmptyText}>İncelenecek yanlış cevap yok.</Text>
+            )}
+            {reviewItems.map(({ answer, index }) => (
               <QuestionResult
                 key={index}
                 answer={answer}
@@ -383,6 +400,22 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: 'white',
     marginBottom: 15,
+  },
+  reviewFilterButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+  reviewFilterText: {
+    color: '#2d3748',
+    fontWeight: '600',
+  },
+  reviewEmptyText: {
+    color: 'white',
+    marginBottom: 12,
   },
   questionResult: {
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
