@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  TextInput,
   Animated,
   Dimensions,
   SafeAreaView as RNSafeAreaView,
@@ -18,16 +19,19 @@ import { generativeAIService } from '../services/generativeAIService';
 import { useFocusEffect } from '@react-navigation/native';
 import { StatsManager } from '../utils/statsManager';
 import { displayUserName, countTodaysQuizzes } from '../utils/homeStats';
+import { filterCategories } from '../utils/categorySearch';
 
 const { width } = Dimensions.get('window');
 
 export default function HomeScreen({ navigation }) {
   const [userName, setUserName] = useState('Kullanıcı');
   const [dailyQuizzes, setDailyQuizzes] = useState(0);
+  const [categoryQuery, setCategoryQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingText, setLoadingText] = useState('');
   // State updates are async: a ref blocks rapid double taps immediately.
   const quizRequestInFlight = useRef(false);
+  const visibleCategories = filterCategories(categories, categoryQuery);
 
   // Refresh on every visit, including after changing the name or finishing a quiz.
   useFocusEffect(useCallback(() => {
@@ -181,17 +185,32 @@ export default function HomeScreen({ navigation }) {
             Hangi konuda kendini test etmek istiyorsun?
           </Text>
 
+          <TextInput
+            style={styles.searchInput}
+            value={categoryQuery}
+            onChangeText={setCategoryQuery}
+            placeholder="Kategori ara (ad veya açıklama)"
+            placeholderTextColor="#718096"
+            autoCorrect={false}
+            accessibilityLabel="Kategorilerde ara"
+          />
+          <Text style={styles.searchCount} accessibilityLiveRegion="polite">
+            {visibleCategories.length} / {categories.length} kategori
+          </Text>
           <ScrollView
             contentContainerStyle={styles.categoriesContainer}
             showsVerticalScrollIndicator={false}
           >
-            {categories.map((category, index) => (
+            {visibleCategories.map((category) => (
               <CategoryCard
                 key={category.id}
                 category={category}
-                index={index}
+                index={categories.indexOf(category)}
               />
             ))}
+            {visibleCategories.length === 0 && (
+              <Text style={styles.emptyState}>Aramanıza uygun kategori bulunamadı.</Text>
+            )}
           </ScrollView>
         </View>
       </LinearGradient>
@@ -258,6 +277,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#718096',
     marginBottom: 20,
+  },
+  searchInput: {
+    backgroundColor: 'white',
+    borderColor: '#cbd5e0',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 16,
+    color: '#2d3748',
+  },
+  searchCount: {
+    color: '#718096',
+    marginVertical: 10,
+  },
+  emptyState: {
+    color: '#718096',
+    textAlign: 'center',
+    paddingVertical: 24,
   },
   categoriesContainer: {
     paddingBottom: 20,
